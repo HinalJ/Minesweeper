@@ -111,7 +111,6 @@ class Sentence():
             return set(self.cells)
         else:
             return set()
-        # raise NotImplementedError
 
     def known_safes(self):
         """
@@ -122,8 +121,6 @@ class Sentence():
         else:
             return set()
 
-        # raise NotImplementedError
-
     def mark_mine(self, cell):
         """
         Updates internal knowledge representation given the fact that
@@ -132,7 +129,6 @@ class Sentence():
         if cell in self.cells:
             self.cells.remove(cell)
             self.count-=1
-        # raise NotImplementedError
 
     def mark_safe(self, cell):
         """
@@ -141,4 +137,3 @@ class Sentence():
         """
         if cell in self.cells:
             self.cells.remove(cell)
-        # raise NotImplementedError

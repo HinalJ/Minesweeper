@@ -2,7 +2,7 @@ import pygame
 import sys
 import time
 
-from minesweeper import Minesweeper
+from minesweeper import Minesweeper, MinesweeperAI
 
 HEIGHT = 9
 WIDTH = 9
@@ -15,6 +15,9 @@ WHITE = (255, 255, 255)
 
 # Create game
 pygame.init()
+programIcon = pygame.image.load("assets/images/logo.png")
+pygame.display.set_icon(programIcon)
+pygame.display.set_caption('Minesweeper')
 size = width, height = 600, 400
 screen = pygame.display.set_mode(size)
 
@@ -37,14 +40,45 @@ flag = pygame.transform.scale(flag, (cell_size, cell_size))
 mine = pygame.image.load("assets/images/mine.png")
 mine = pygame.transform.scale(mine, (cell_size, cell_size))
 
-# Create game
+# Create game and AI agent
 game = Minesweeper(height=HEIGHT, width=WIDTH, mines=MINES)
+ai = MinesweeperAI(height=HEIGHT, width=WIDTH)
 
 # Keep track of revealed cells, flagged cells, and if a mine was hit
 revealed = set()
 flags = set()
 lost = False
 win = False
+
+def draw_board(cells):
+    for i in range(HEIGHT):
+        row = []
+        for j in range(WIDTH):
+            # Draw rectangle for cell
+            rect = pygame.Rect(
+                board_origin[0] + j * cell_size,
+                board_origin[1] + i * cell_size,
+                cell_size, cell_size
+            )
+            pygame.draw.rect(screen, GRAY, rect)
+            pygame.draw.rect(screen, WHITE, rect, 3)
+
+            # Add a mine, flag, or number if needed
+            if game.is_mine((i, j)) and lost:
+                screen.blit(mine, rect)
+            elif (i, j) in flags:
+                screen.blit(flag, rect)
+            elif (i, j) in revealed:
+                neighbors = smallFont.render(
+                    str(game.nearby_mines((i, j))),
+                    True, BLACK
+                )
+                neighborsTextRect = neighbors.get_rect()
+                neighborsTextRect.center = rect.center
+                screen.blit(neighbors, neighborsTextRect)
+
+            row.append(rect)
+        cells.append(row)
 
 # Show instructions initially
 instructions = True
@@ -60,7 +94,6 @@ while True:
 
     # Show game instructions
     if instructions:
-
         # Title
         title = largeFont.render("Play Minesweeper", True, WHITE)
         titleRect = title.get_rect()
@@ -100,35 +133,18 @@ while True:
 
     # Draw board
     cells = []
-    for i in range(HEIGHT):
-        row = []
-        for j in range(WIDTH):
+    draw_board(cells)
 
-            # Draw rectangle for cell
-            rect = pygame.Rect(
-                board_origin[0] + j * cell_size,
-                board_origin[1] + i * cell_size,
-                cell_size, cell_size
-            )
-            pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, WHITE, rect, 3)
-
-            # Add a mine, flag, or number if needed
-            if game.is_mine((i, j)) and lost:
-                screen.blit(mine, rect)
-            elif (i, j) in flags:
-                screen.blit(flag, rect)
-            elif (i, j) in revealed:
-                neighbors = smallFont.render(
-                    str(game.nearby_mines((i, j))),
-                    True, BLACK
-                )
-                neighborsTextRect = neighbors.get_rect()
-                neighborsTextRect.center = rect.center
-                screen.blit(neighbors, neighborsTextRect)
-
-            row.append(rect)
-        cells.append(row)
+    # AI Move button
+    aiButton = pygame.Rect(
+        (2 / 3) * width + BOARD_PADDING, (1 / 3) * height - 50,
+        (width / 3) - BOARD_PADDING * 2, 50
+    )
+    buttonText = mediumFont.render("AI Agent", True, BLACK)
+    buttonRect = buttonText.get_rect()
+    buttonRect.center = aiButton.center
+    pygame.draw.rect(screen, WHITE, aiButton)
+    screen.blit(buttonText, buttonRect)
 
     # Reset button
     resetButton = pygame.Rect(
@@ -142,7 +158,7 @@ while True:
     screen.blit(buttonText, buttonRect)
 
     # Display text
-    text = "Lost" if lost else "Won" if (MINES == HEIGHT*WIDTH - len(revealed)) or (game.mines == flags) else ""
+    text = "Lost" if lost else "Won" if game.mines == flags or MINES==HEIGHT*WIDTH - len(revealed) else ""
     if text == "Won":
         win = True
     text = mediumFont.render(text, True, WHITE)
@@ -151,6 +167,7 @@ while True:
     screen.blit(text, textRect)
 
     move = None
+
     left, _, right = pygame.mouse.get_pressed()
 
     # Check for a right-click to toggle flagging
@@ -164,32 +181,74 @@ while True:
                     else:
                         flags.add((i, j))
                     time.sleep(0.2)
+
     elif left == 1:
         mouse = pygame.mouse.get_pos()
+        # If AI button clicked, make an AI move
+        if aiButton.collidepoint(mouse) and not lost and not win:
+            while(True):
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        sys.exit()
+
+                screen.fill(BLACK)
+
+                move = ai.make_safe_move()
+                if move is None:
+                    move = ai.make_random_move()
+                    if move is None:
+                        flags = ai.mines.copy()
+                        print("No moves left to make.\nYou Won!")
+                        break
+                    elif lost:
+                        print("You Lost!")
+                        break
+                    else:
+                        print("No known safe moves, AI making random move.")
+                else:
+                    print("AI making safe move.")
+                time.sleep(0.0001)
+
+                cells = []
+                draw_board(cells)
+                if move:
+                    if game.is_mine(move):
+                        lost = True
+                    else:
+                        nearby = game.nearby_mines(move)
+                        revealed.add(move)
+                        ai.add_knowledge(move, nearby)
+
+                pygame.display.flip()
+
+                move = None
 
         # Reset game state
-        if resetButton.collidepoint(mouse):
+        elif resetButton.collidepoint(mouse):
             game = Minesweeper(height=HEIGHT, width=WIDTH, mines=MINES)
+            ai = MinesweeperAI(height=HEIGHT, width=WIDTH)
             revealed = set()
             flags = set()
             lost = False
             win = False
             continue
+
     # User-made move
     elif not lost and not win:
-        for i in range(HEIGHT):
-            for j in range(WIDTH):
-                if (cells[i][j].collidepoint(mouse)
-                        and (i, j) not in flags
-                        and (i, j) not in revealed):
-                    move = (i, j)
+            for i in range(HEIGHT):
+                for j in range(WIDTH):
+                    if (cells[i][j].collidepoint(mouse)
+                            and (i, j) not in flags
+                            and (i, j) not in revealed):
+                        move = (i, j)
 
-    # Make move
-    if move and not win:
+    # Make move and update AI knowledge
+    if move:
         if game.is_mine(move):
             lost = True
         else:
             nearby = game.nearby_mines(move)
             revealed.add(move)
+            ai.add_knowledge(move, nearby)
 
     pygame.display.flip()
